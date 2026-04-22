@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../core/p3d_models.dart';
+import '../data/api_operation_repository.dart';
 import '../data/operation_repository.dart';
 import '../core/ui_components.dart';
+import '../features/calculator/presentation/calculator_page.dart';
 import '../features/clients/presentation/clients_page.dart';
 import '../features/customer_orders/presentation/customer_order_page.dart';
 import '../features/dashboard/presentation/dashboard_page.dart';
@@ -15,7 +17,7 @@ class P3dApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final repository = InMemoryOperationRepository();
+    final repository = ApiOperationRepository();
 
     return MaterialApp(
       title: 'Me Ajuda em 3D',
@@ -104,6 +106,7 @@ class _AppShellState extends State<AppShell> {
       QuotesPage(repository: widget.repository),
       ProductionPage(repository: widget.repository),
       ClientsPage(repository: widget.repository),
+      const CalculatorPage(),
     ];
 
     final destinations = const [
@@ -141,6 +144,13 @@ class _AppShellState extends State<AppShell> {
         label: 'Clientes',
         title: 'Clientes',
         subtitle: 'Historico comercial e pedidos em andamento',
+      ),
+      _ShellDestination(
+        icon: Icons.calculate_outlined,
+        selectedIcon: Icons.calculate_rounded,
+        label: 'Calc.',
+        title: 'Calculadora 3D',
+        subtitle: 'Simule custos e precos de impressao',
       ),
     ];
 
@@ -233,6 +243,7 @@ class _AppShellState extends State<AppShell> {
         label: 'Novo cliente',
         onPressed: () => _showCreateClient(context),
       ),
+      5 => null,
       _ => null,
     };
   }
@@ -352,7 +363,7 @@ class _AppShellState extends State<AppShell> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    initialValue: productTitle,
+                    value: productTitle,
                     items: const [
                       DropdownMenuItem(
                         value: 'Chaveiro personalizado',

@@ -1,40 +1,107 @@
-import 'dotenv/config';
-import cors from 'cors';
-import express from 'express';
-import multer from 'multer';
-import { ObjectId } from 'mongodb';
-import { getDb } from './db.js';
+/** @format */
+
+import cors from "cors";
+import "dotenv/config";
+import express from "express";
+import { ObjectId } from "mongodb";
+import multer from "multer";
+import { getDb } from "./db.js";
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: "uploads/" });
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-app.use('/uploads', express.static('uploads'));
+app.use(express.json({ limit: "1mb" }));
+app.use("/uploads", express.static("uploads"));
 
 function code(prefix) {
   return `${prefix}-${Date.now().toString().slice(-6)}`;
 }
 
-app.get('/health', (_, res) => res.json({ ok: true }));
+app.get("/health", (_, res) => res.json({ ok: true }));
 
-app.get('/customer-products', (_, res) => {
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
+app.get("/dashboard", async (_, res, next) => {
+  try {
+    const db = await getDb();
+    const [quotes, jobs, materials] = await Promise.all([
+      db.collection("quotes").find().toArray(),
+      db.collection("jobs").find().toArray(),
+      db.collection("materials").find().toArray(),
+    ]);
+    const now = new Date();
+    const in36h = new Date(now.getTime() + 36 * 60 * 60 * 1000);
+    res.json({
+      pendingQuotes: quotes.filter(
+        (q) => q.status === "draft" || q.status === "sent",
+      ).length,
+      inProduction: jobs.filter(
+        (j) => j.status === "queue" || j.status === "printing",
+      ).length,
+      readyPickup: jobs.filter((j) => j.status === "readyPickup").length,
+      lowFilaments: materials.filter(
+        (m) =>
+          m.remainingGrams != null &&
+          m.lowStockGrams != null &&
+          m.remainingGrams <= m.lowStockGrams,
+      ).length,
+      criticalDeadlines: jobs.filter(
+        (j) =>
+          j.dueAt && new Date(j.dueAt) <= in36h && j.status !== "delivered",
+      ).length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Customer products (rota publica)
+// ---------------------------------------------------------------------------
+
+app.get("/customer-products", (_, res) => {
   res.json([
-    { id: 'keyring', title: 'Chaveiro personalizado', fromPriceCents: 1290, needsImage: false },
-    { id: 'decor', title: 'Encomenda decoracao', fromPriceCents: 3490, needsImage: false },
-    { id: 'frame', title: 'Quadro ou placa', fromPriceCents: 5990, needsImage: false },
-    { id: 'image', title: 'Pedido com base em imagem', fromPriceCents: 4590, needsImage: true },
-    { id: 'other', title: 'Outros', fromPriceCents: 2990, needsImage: false }
+    {
+      id: "keyring",
+      title: "Chaveiro personalizado",
+      fromPriceCents: 1290,
+      needsImage: false,
+    },
+    {
+      id: "decor",
+      title: "Encomenda decoracao",
+      fromPriceCents: 3490,
+      needsImage: false,
+    },
+    {
+      id: "frame",
+      title: "Quadro ou placa",
+      fromPriceCents: 5990,
+      needsImage: false,
+    },
+    {
+      id: "image",
+      title: "Pedido com base em imagem",
+      fromPriceCents: 4590,
+      needsImage: true,
+    },
+    { id: "other", title: "Outros", fromPriceCents: 2990, needsImage: false },
   ]);
 });
 
-app.get('/customer-orders', async (req, res, next) => {
+app.get("/customer-orders", async (req, res, next) => {
   try {
     const db = await getDb();
-    const email = String(req.query.email || '').trim().toLowerCase();
+    const email = String(req.query.email || "")
+      .trim()
+      .toLowerCase();
     const filter = email ? { email } : {};
-    const orders = await db.collection('customer_orders')
+    const orders = await db
+      .collection("customer_orders")
       .find(filter)
       .sort({ createdAt: -1 })
       .limit(100)
@@ -45,32 +112,34 @@ app.get('/customer-orders', async (req, res, next) => {
   }
 });
 
-app.post('/customer-orders', async (req, res, next) => {
+app.post("/customer-orders", async (req, res, next) => {
   try {
     const db = await getDb();
     const now = new Date();
     const order = {
-      code: code('PED'),
+      code: code("PED"),
       customerName: req.body.customerName,
-      email: String(req.body.email || '').trim().toLowerCase(),
+      email: String(req.body.email || "")
+        .trim()
+        .toLowerCase(),
       phone: req.body.phone,
-      kind: req.body.kind || 'person',
+      kind: req.body.kind || "person",
       productTitle: req.body.productTitle,
       description: req.body.description,
       quantity: Number(req.body.quantity || 1),
       hasReferenceImage: Boolean(req.body.hasReferenceImage),
-      status: 'received',
+      status: "received",
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
-    const result = await db.collection('customer_orders').insertOne(order);
+    const result = await db.collection("customer_orders").insertOne(order);
     res.status(201).json({ ...order, _id: result.insertedId });
   } catch (error) {
     next(error);
   }
 });
 
-app.post('/uploads', upload.single('file'), async (req, res, next) => {
+app.post("/uploads", upload.single("file"), async (req, res, next) => {
   try {
     const db = await getDb();
     const doc = {
@@ -79,66 +148,90 @@ app.post('/uploads', upload.single('file'), async (req, res, next) => {
       mimeType: req.file.mimetype,
       size: req.file.size,
       path: req.file.path,
-      url: `${process.env.PUBLIC_BASE_URL || ''}/${req.file.path}`,
-      createdAt: new Date()
+      url: `${process.env.PUBLIC_BASE_URL || ""}/${req.file.path}`,
+      createdAt: new Date(),
     };
-    const result = await db.collection('uploads').insertOne(doc);
+    const result = await db.collection("uploads").insertOne(doc);
     res.status(201).json({ ...doc, _id: result.insertedId });
   } catch (error) {
     next(error);
   }
 });
 
-app.get('/clients', async (_, res, next) => {
+app.get("/clients", async (_, res, next) => {
   try {
     const db = await getDb();
-    res.json(await db.collection('clients').find().sort({ createdAt: -1 }).toArray());
+    res.json(
+      await db.collection("clients").find().sort({ createdAt: -1 }).toArray(),
+    );
   } catch (error) {
     next(error);
   }
 });
 
-app.post('/clients', async (req, res, next) => {
+app.post("/clients", async (req, res, next) => {
   try {
     const db = await getDb();
     const client = { ...req.body, isActive: true, createdAt: new Date() };
-    const result = await db.collection('clients').insertOne(client);
+    const result = await db.collection("clients").insertOne(client);
     res.status(201).json({ ...client, _id: result.insertedId });
   } catch (error) {
     next(error);
   }
 });
 
-app.get('/materials', async (_, res, next) => {
+app.get("/materials", async (_, res, next) => {
   try {
     const db = await getDb();
-    res.json(await db.collection('materials').find().sort({ createdAt: -1 }).toArray());
+    res.json(
+      await db.collection("materials").find().sort({ createdAt: -1 }).toArray(),
+    );
   } catch (error) {
     next(error);
   }
 });
 
-app.post('/materials', async (req, res, next) => {
+app.post("/materials", async (req, res, next) => {
   try {
     const db = await getDb();
     const material = { ...req.body, createdAt: new Date() };
-    const result = await db.collection('materials').insertOne(material);
+    const result = await db.collection("materials").insertOne(material);
     res.status(201).json({ ...material, _id: result.insertedId });
   } catch (error) {
     next(error);
   }
 });
 
-app.get('/search', async (req, res, next) => {
+app.get("/search", async (req, res, next) => {
   try {
     const db = await getDb();
-    const q = String(req.query.q || '').trim();
+    const q = String(req.query.q || "").trim();
     if (!q) return res.json([]);
-    const regex = new RegExp(q, 'i');
+    const regex = new RegExp(q, "i");
     const [orders, clients, materials] = await Promise.all([
-      db.collection('customer_orders').find({ $or: [{ code: regex }, { customerName: regex }, { productTitle: regex }] }).limit(5).toArray(),
-      db.collection('clients').find({ $or: [{ name: regex }, { phone: regex }, { channel: regex }] }).limit(5).toArray(),
-      db.collection('materials').find({ $or: [{ brand: regex }, { material: regex }, { colorName: regex }] }).limit(5).toArray()
+      db
+        .collection("customer_orders")
+        .find({
+          $or: [
+            { code: regex },
+            { customerName: regex },
+            { productTitle: regex },
+          ],
+        })
+        .limit(5)
+        .toArray(),
+      db
+        .collection("clients")
+        .find({ $or: [{ name: regex }, { phone: regex }, { channel: regex }] })
+        .limit(5)
+        .toArray(),
+      db
+        .collection("materials")
+        .find({
+          $or: [{ brand: regex }, { material: regex }, { colorName: regex }],
+        })
+        .limit(5)
+        .toArray(),
     ]);
     res.json({ orders, clients, materials });
   } catch (error) {
@@ -146,18 +239,171 @@ app.get('/search', async (req, res, next) => {
   }
 });
 
-app.get('/notifications', async (_, res, next) => {
+app.get("/notifications", async (_, res, next) => {
   try {
     const db = await getDb();
-    const lowMaterials = await db.collection('materials')
-      .find({ $expr: { $lte: ['$remainingGrams', '$lowStockGrams'] } })
+    const lowMaterials = await db
+      .collection("materials")
+      .find({ $expr: { $lte: ["$remainingGrams", "$lowStockGrams"] } })
       .limit(20)
       .toArray();
-    res.json(lowMaterials.map((item) => ({
-      title: 'Material baixo',
-      message: `${item.material} ${item.colorName || ''}`.trim(),
-      severity: 'warning'
-    })));
+    res.json(
+      lowMaterials.map((item) => ({
+        title: "Material baixo",
+        message: `${item.material} ${item.colorName || ""}`.trim(),
+        severity: "warning",
+      })),
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Quotes
+// ---------------------------------------------------------------------------
+
+app.get("/quotes", async (_, res, next) => {
+  try {
+    const db = await getDb();
+    res.json(
+      await db.collection("quotes").find().sort({ createdAt: -1 }).toArray(),
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/quotes", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const quote = {
+      ...req.body,
+      code: code("3D"),
+      status: req.body.status || "draft",
+      createdAt: new Date(),
+    };
+    const result = await db.collection("quotes").insertOne(quote);
+    res.status(201).json({ ...quote, _id: result.insertedId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Templates
+// ---------------------------------------------------------------------------
+
+app.get("/templates", async (_, res, next) => {
+  try {
+    const db = await getDb();
+    res.json(await db.collection("templates").find().toArray());
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Jobs
+// ---------------------------------------------------------------------------
+
+app.get("/jobs", async (_, res, next) => {
+  try {
+    const db = await getDb();
+    res.json(
+      await db
+        .collection("jobs")
+        .find()
+        .sort({ priority: -1, dueAt: 1 })
+        .toArray(),
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/jobs", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const job = { ...req.body, createdAt: new Date() };
+    const result = await db.collection("jobs").insertOne(job);
+    res.status(201).json({ ...job, _id: result.insertedId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/jobs/:id/status", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const update = { status: req.body.status, updatedAt: new Date() };
+    if (req.body.status === "readyPickup") update.readyAt = new Date();
+    if (req.body.status === "printing") update.startedAt = new Date();
+    await db
+      .collection("jobs")
+      .updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Supplies (insumos)
+// ---------------------------------------------------------------------------
+
+app.get("/supplies", async (_, res, next) => {
+  try {
+    const db = await getDb();
+    res.json(
+      await db.collection("supplies").find().sort({ title: 1 }).toArray(),
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/supplies", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const supply = { ...req.body, createdAt: new Date() };
+    const result = await db.collection("supplies").insertOne(supply);
+    res.status(201).json({ ...supply, _id: result.insertedId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH endpoints (admin)
+// ---------------------------------------------------------------------------
+
+app.patch("/customer-orders/:id/status", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    await db
+      .collection("customer_orders")
+      .updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { status: req.body.status, updatedAt: new Date() } },
+      );
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/materials/:id", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const { _id, ...fields } = req.body;
+    await db
+      .collection("materials")
+      .updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { ...fields, updatedAt: new Date() } },
+      );
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }
@@ -165,7 +411,7 @@ app.get('/notifications', async (_, res, next) => {
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({ error: error.message || 'Internal error' });
+  res.status(500).json({ error: error.message || "Internal error" });
 });
 
 app.listen(port, () => {

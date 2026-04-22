@@ -1,3 +1,5 @@
+<!-- @format -->
+
 # Me Ajuda em 3D
 
 App Flutter mobile para gestao operacional de impressao 3D.
@@ -35,18 +37,43 @@ O caminho recomendado para a integracao e:
 1. Criar uma API no Railway, por exemplo Node/Nest, Express ou Dart Shelf.
 2. Conectar essa API ao MongoDB Atlas usando variaveis de ambiente no Railway.
 3. Expor endpoints por modulo: clients, materials, quotes, jobs e settings.
-4. Implementar um `MongoRailwayOperationRepository` no Flutter usando HTTP.
+4. Implementar um `ApiOperationRepository` no Flutter usando HTTP.
 5. Manter segredo, string de conexao e Mercado Pago apenas no servidor.
 
 O app Flutter deve receber somente JSON da API. Ele nao deve conectar direto no
 MongoDB.
 
-## Endpoints sugeridos para a API
+## Endpoints da API
 
-- `GET /customer-products`
-- `POST /customer-orders`
-- `GET /customer-orders?email=cliente@email.com`
-- `GET /materials`
-- `GET /quotes`
-- `GET /jobs`
-- `PATCH /jobs/:id/status`
+### Rota publica (cliente)
+
+- `GET /customer-products` — lista produtos base
+- `POST /customer-orders` — cria pedido
+- `GET /customer-orders?email=...` — consulta pedidos por email
+
+### Admin
+
+- `GET /dashboard` — resumo (orcamentos, producao, estoque, prazos)
+- `GET /materials` / `POST /materials` / `PATCH /materials/:id`
+- `GET /supplies` / `POST /supplies`
+- `GET /quotes` / `POST /quotes`
+- `GET /templates`
+- `GET /jobs` / `POST /jobs` / `PATCH /jobs/:id/status`
+- `GET /clients` / `POST /clients`
+- `PATCH /customer-orders/:id/status`
+- `GET /search?q=...`
+- `GET /notifications`
+- `POST /uploads` (multipart)
+
+## Como rodar
+
+```bash
+# API
+cd apps/api
+cp .env.example .env   # configure MONGODB_URI
+npm install
+npm run dev
+
+# Flutter (com URL da API)
+flutter run --dart-define=API_BASE_URL=http://localhost:3000
+```

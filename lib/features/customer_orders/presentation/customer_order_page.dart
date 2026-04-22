@@ -757,7 +757,7 @@ class _OrderForm extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: finishPreference,
+                value: finishPreference,
                 decoration: const InputDecoration(
                   labelText: 'Acabamento desejado',
                   prefixIcon: Icon(Icons.auto_fix_high_outlined),
