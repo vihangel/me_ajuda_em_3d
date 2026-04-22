@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "me-ajuda-em-3d-monorepo",
+  "scripts": {
+    "api:dev": "npm --workspace apps/api run dev",
+    "api:start": "npm --workspace apps/api start"
+  },
+  "workspaces": [
+    "apps/api"
+  ]
+}
