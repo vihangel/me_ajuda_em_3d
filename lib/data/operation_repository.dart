@@ -10,8 +10,12 @@ abstract class OperationRepository {
   Future<List<ProductionJob>> getJobs();
   Future<List<P3dClient>> getClients();
   Future<List<CustomerProduct>> getCustomerProducts();
+  Future<List<CatalogItem>> getCatalogItems(String categoryId);
   Future<List<CustomerOrder>> getCustomerOrdersByEmail(String email);
   Future<CustomerOrder> createCustomerOrder(CreateCustomerOrderInput input);
+  Future<void> updateCustomerOrderStatus(String id, CustomerOrderStatus status);
+  Future<void> updateJobStatus(String id, JobStatus status);
+  Future<void> updateMaterial(String id, Map<String, dynamic> fields);
   Future<P3dClient> createClient({
     required String name,
     required String phone,
@@ -400,26 +404,35 @@ class InMemoryOperationRepository implements OperationRepository {
   @override
   Future<List<CustomerProduct>> getCustomerProducts() async => const [
     CustomerProduct(
-      id: 'customer_keyring',
-      title: 'Chaveiro personalizado',
-      description: 'Nome, logo, personagem simples ou lembrancinha em lote.',
+      id: 'cat_keyring',
+      title: 'Chaveiros',
+      description: 'Chaveiros personalizados com nome, logo ou personagem.',
       icon: 'key',
       examples: ['brinde', 'nome', 'logo', 'evento'],
       fromPriceCents: 1290,
       needsImage: false,
     ),
     CustomerProduct(
-      id: 'customer_decor',
-      title: 'Encomenda decoracao',
+      id: 'cat_miniature',
+      title: 'Miniaturas',
+      description: 'Bonecos, personagens, figuras e pecas colecionaveis.',
+      icon: 'miniature',
+      examples: ['boneco', 'personagem', 'figura', 'RPG'],
+      fromPriceCents: 3990,
+      needsImage: true,
+    ),
+    CustomerProduct(
+      id: 'cat_decor',
+      title: 'Decoracao',
       description: 'Pecas para mesa, parede, festas, nichos e ambientes.',
       icon: 'decor',
-      examples: ['mesa', 'festa', 'parede', 'presente'],
+      examples: ['vaso', 'mesa', 'festa', 'presente'],
       fromPriceCents: 3490,
       needsImage: false,
     ),
     CustomerProduct(
-      id: 'customer_frame',
-      title: 'Quadro ou placa',
+      id: 'cat_sign',
+      title: 'Placas e letreiros',
       description: 'Placas com relevo, letreiros, logos e quadros decorativos.',
       icon: 'frame',
       examples: ['logo 3D', 'letreiro', 'placa', 'quadro'],
@@ -427,25 +440,113 @@ class InMemoryOperationRepository implements OperationRepository {
       needsImage: false,
     ),
     CustomerProduct(
-      id: 'customer_image',
-      title: 'Pedido com base em imagem',
-      description: 'Envie uma foto ou referencia para avaliarmos a modelagem.',
-      icon: 'image',
-      examples: ['foto', 'desenho', 'referencia', 'print'],
-      fromPriceCents: 4590,
-      needsImage: true,
+      id: 'cat_lamp',
+      title: 'Luminarias',
+      description: 'Luminarias decorativas, abajures e caixas de luz.',
+      icon: 'lamp',
+      examples: ['abajur', 'litofane', 'caixa de luz', 'LED'],
+      fromPriceCents: 4990,
+      needsImage: false,
     ),
     CustomerProduct(
-      id: 'customer_other',
+      id: 'cat_other',
       title: 'Outros',
       description:
-          'Conte sua ideia em aberto: peca tecnica, reposicao ou presente.',
+          'Peca tecnica, reposicao, suporte, organizador ou ideia livre.',
       icon: 'other',
-      examples: ['peca tecnica', 'suporte', 'miniatura', 'prototipo'],
+      examples: ['peca tecnica', 'suporte', 'organizador', 'prototipo'],
       fromPriceCents: 2990,
       needsImage: false,
     ),
   ];
+
+  static const _catalogItems = [
+    // Chaveiros
+    CatalogItem(
+      id: 'ci_01', categoryId: 'cat_keyring',
+      title: 'Chaveiro com nome', description: 'Nome em relevo, ate 10 letras.',
+      style: 'Moderno', priceCents: 1490, imageTag: 'key_name',
+    ),
+    CatalogItem(
+      id: 'ci_02', categoryId: 'cat_keyring',
+      title: 'Chaveiro com logo', description: 'Logo da empresa ou time.',
+      style: 'Corporativo', priceCents: 1890, imageTag: 'key_logo',
+    ),
+    CatalogItem(
+      id: 'ci_03', categoryId: 'cat_keyring',
+      title: 'Chaveiro personagem', description: 'Personagem simples estilizado.',
+      style: 'Divertido', priceCents: 2290, imageTag: 'key_char',
+    ),
+    // Miniaturas
+    CatalogItem(
+      id: 'ci_04', categoryId: 'cat_miniature',
+      title: 'Miniatura de personagem', description: 'Boneco ate 15cm de altura.',
+      style: 'Detalhado', priceCents: 5990, imageTag: 'mini_char',
+    ),
+    CatalogItem(
+      id: 'ci_05', categoryId: 'cat_miniature',
+      title: 'Peca de RPG/tabuleiro', description: 'Miniaturas para jogos.',
+      style: 'Fantasia', priceCents: 3490, imageTag: 'mini_rpg',
+    ),
+    // Decoracao
+    CatalogItem(
+      id: 'ci_06', categoryId: 'cat_decor',
+      title: 'Vaso geometrico', description: 'Vaso decorativo low-poly.',
+      style: 'Geometrico', priceCents: 4990, imageTag: 'decor_vase',
+    ),
+    CatalogItem(
+      id: 'ci_07', categoryId: 'cat_decor',
+      title: 'Porta-retrato 3D', description: 'Moldura com relevo tematico.',
+      style: 'Classico', priceCents: 3990, imageTag: 'decor_frame',
+    ),
+    // Placas e letreiros
+    CatalogItem(
+      id: 'ci_08', categoryId: 'cat_sign',
+      title: 'Letreiro de parede', description: 'Nome ou frase em relevo.',
+      style: 'Moderno', priceCents: 6990, imageTag: 'sign_wall',
+    ),
+    CatalogItem(
+      id: 'ci_09', categoryId: 'cat_sign',
+      title: 'Placa de porta', description: 'Placa com nome e icone.',
+      style: 'Minimalista', priceCents: 3990, imageTag: 'sign_door',
+    ),
+    // Luminarias
+    CatalogItem(
+      id: 'ci_10', categoryId: 'cat_lamp',
+      title: 'Luminaria litofane', description: 'Foto impressa em luz.',
+      style: 'Personalizado', priceCents: 7990, imageTag: 'lamp_litho',
+    ),
+    CatalogItem(
+      id: 'ci_11', categoryId: 'cat_lamp',
+      title: 'Abajur geometrico', description: 'Abajur com padrao vazado.',
+      style: 'Geometrico', priceCents: 5990, imageTag: 'lamp_geo',
+    ),
+  ];
+
+  @override
+  Future<List<CatalogItem>> getCatalogItems(String categoryId) async {
+    return _catalogItems
+        .where((item) => item.categoryId == categoryId)
+        .toList();
+  }
+
+  @override
+  Future<void> updateCustomerOrderStatus(
+    String id,
+    CustomerOrderStatus status,
+  ) async {
+    // In-memory: no-op (orders are immutable const objects).
+  }
+
+  @override
+  Future<void> updateJobStatus(String id, JobStatus status) async {
+    // In-memory: no-op.
+  }
+
+  @override
+  Future<void> updateMaterial(String id, Map<String, dynamic> fields) async {
+    // In-memory: no-op.
+  }
 
   @override
   Future<List<CustomerOrder>> getCustomerOrdersByEmail(String email) async {

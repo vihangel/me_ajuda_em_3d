@@ -73,6 +73,26 @@ class CustomerProduct {
   final bool needsImage;
 }
 
+class CatalogItem {
+  const CatalogItem({
+    required this.id,
+    required this.categoryId,
+    required this.title,
+    required this.description,
+    required this.style,
+    required this.priceCents,
+    required this.imageTag,
+  });
+
+  final String id;
+  final String categoryId;
+  final String title;
+  final String description;
+  final String style;
+  final int priceCents;
+  final String imageTag;
+}
+
 class CustomerOrder {
   const CustomerOrder({
     required this.id,

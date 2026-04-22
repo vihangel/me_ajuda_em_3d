@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../core/formatters.dart';
 import '../core/p3d_models.dart';
 import '../data/api_operation_repository.dart';
 import '../data/operation_repository.dart';
+import '../data/services/api_client.dart';
+import '../data/services/token_service.dart';
 import '../core/ui_components.dart';
 import '../features/calculator/presentation/calculator_page.dart';
 import '../features/clients/presentation/clients_page.dart';
@@ -11,13 +14,16 @@ import '../features/dashboard/presentation/dashboard_page.dart';
 import '../features/jobs/presentation/production_page.dart';
 import '../features/materials/presentation/materials_page.dart';
 import '../features/quotes/presentation/quotes_page.dart';
+import '../features/settings/presentation/settings_page.dart';
 
 class P3dApp extends StatelessWidget {
   const P3dApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final repository = ApiOperationRepository();
+    final tokenService = TokenService();
+    final apiClient = ApiClient(tokenService);
+    final repository = ApiOperationRepository(client: apiClient);
 
     return MaterialApp(
       title: 'Me Ajuda em 3D',
@@ -107,6 +113,7 @@ class _AppShellState extends State<AppShell> {
       ProductionPage(repository: widget.repository),
       ClientsPage(repository: widget.repository),
       const CalculatorPage(),
+      const SettingsPage(),
     ];
 
     final destinations = const [
@@ -151,6 +158,13 @@ class _AppShellState extends State<AppShell> {
         label: 'Calc.',
         title: 'Calculadora 3D',
         subtitle: 'Simule custos e precos de impressao',
+      ),
+      _ShellDestination(
+        icon: Icons.settings_outlined,
+        selectedIcon: Icons.settings_rounded,
+        label: 'Config.',
+        title: 'Configuracoes',
+        subtitle: 'Parametros de custo, margem e prazos',
       ),
     ];
 
@@ -236,14 +250,13 @@ class _AppShellState extends State<AppShell> {
       3 => ActionPill(
         icon: Icons.swap_vert_rounded,
         label: 'Reordenar',
-        onPressed: () => showComingSoon(context, 'Reordenacao da fila'),
+        onPressed: () => _showReorderQueue(context),
       ),
       4 => ActionPill(
         icon: Icons.person_add_alt_rounded,
         label: 'Novo cliente',
         onPressed: () => _showCreateClient(context),
       ),
-      5 => null,
       _ => null,
     };
   }
@@ -565,6 +578,98 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
+
+  Future<void> _showReorderQueue(BuildContext context) async {
+    final jobs = await widget.repository.getJobs();
+    final queueJobs =
+        jobs.where((j) => j.status == JobStatus.queue).toList();
+    if (!mounted) return;
+    if (queueJobs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum job na fila para reordenar.')),
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Text(
+              'Fila de producao',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ordem atual por prioridade e prazo',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (var i = 0; i < queueJobs.length; i++) ...[
+              AppCard(
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.12),
+                      child: Text(
+                        '${i + 1}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            queueJobs[i].title,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            '${queueJobs[i].client.name} • vence ${formatDate(queueJobs[i].dueAt)}',
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AppStatusChip(
+                      label: 'P${queueJobs[i].priority}',
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 IconData _searchIcon(String icon) {
@@ -589,9 +694,17 @@ class _AdminSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return Container(
       width: 248,
-      color: const Color(0xFF0C1A35),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1E2A4A), Color(0xFF16213A)],
+        ),
+      ),
       padding: const EdgeInsets.fromLTRB(14, 24, 14, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,16 +720,6 @@ class _AdminSidebar extends StatelessWidget {
               selected: i == index,
               onTap: () => onChanged(i),
             ),
-          const SizedBox(height: 20),
-          _SidebarSection(
-            title: 'Estoque',
-            items: const [
-              'Filamentos',
-              'Acessorios',
-              'Resinas e Tintas',
-              'Acabamentos',
-            ],
-          ),
           const Spacer(),
           Container(
             padding: const EdgeInsets.all(12),
@@ -662,74 +765,53 @@ class _SidebarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Material(
         color: selected
-            ? Colors.white.withValues(alpha: 0.12)
+            ? const Color(0xFF4865F4).withValues(alpha: 0.22)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
+          hoverColor: Colors.white.withValues(alpha: 0.06),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
                 Icon(
                   selected ? destination.selectedIcon : destination.icon,
-                  color: Colors.white,
+                  color: selected
+                      ? const Color(0xFF9DA5FF)
+                      : Colors.white.withValues(alpha: 0.7),
                   size: 22,
                 ),
                 const SizedBox(width: 14),
                 Text(
                   destination.label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                  style: TextStyle(
+                    color: selected
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.7),
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: 14,
                   ),
                 ),
+                if (selected) ...[
+                  const Spacer(),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF9DA5FF),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SidebarSection extends StatelessWidget {
-  const _SidebarSection({required this.title, required this.items});
-
-  final String title;
-  final List<String> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.50),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                item,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.82),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

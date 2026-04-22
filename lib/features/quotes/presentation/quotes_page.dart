@@ -65,6 +65,7 @@ class _QuoteCard extends StatelessWidget {
     final color = quoteStatusColor(quote.status, colors);
 
     return AppCard(
+      onTap: () => _showQuoteDetail(context),
       child: Padding(
         padding: EdgeInsets.zero,
         child: Column(
@@ -108,6 +109,180 @@ class _QuoteCard extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showQuoteDetail(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final color = quoteStatusColor(quote.status, colors);
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Orcamento #${quote.code}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                AppStatusChip(label: quote.status.label, color: color),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${quote.client.name} • ${quote.client.phone}',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            for (final item in quote.items) ...[
+              SoftPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item.quantity}x ${item.title}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.material} • ${item.finish} • ${item.color}',
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${item.gramsEstimate}g • ${item.printMinutesEstimate}min',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Unitario'),
+                        Text(
+                          formatMoney(item.unitPriceCents),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (quote.discountCents > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Desconto'),
+                    Text(
+                      '- ${formatMoney(quote.discountCents)}',
+                      style: TextStyle(color: colors.error),
+                    ),
+                  ],
+                ),
+              ),
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Total',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  formatMoney(quote.finalTotalCents),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: colors.primary,
+                      ),
+                ),
+              ],
+            ),
+            if (quote.notes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Obs: ${quote.notes}',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+            ],
+            const SizedBox(height: 20),
+            if (quote.status == QuoteStatus.draft) ...[
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Orcamento #${quote.code} enviado ao cliente.',
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.send_outlined),
+                label: const Text('Enviar ao cliente'),
+              ),
+            ],
+            if (quote.status == QuoteStatus.sent) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '#${quote.code} aprovado.',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Aprovar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '#${quote.code} recusado.',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Recusar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -214,9 +389,29 @@ class _QuoteEditorPreview extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Rascunho salvo com sucesso.'),
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Salvar rascunho'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Orcamento enviado ao cliente.'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.send_outlined),
+                label: const Text('Enviar ao cliente'),
               ),
             ],
           ),

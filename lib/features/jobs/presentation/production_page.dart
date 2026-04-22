@@ -236,20 +236,128 @@ class _JobDetailSheet extends StatelessWidget {
               ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () =>
-                  showComingSoon(context, 'Atualizacao do cliente'),
+              onPressed: () => _showUpdateClient(context),
               icon: const Icon(Icons.send_outlined),
               label: const Text('Atualizar cliente'),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => showComingSoon(context, 'Retirada do pedido'),
-              icon: const Icon(Icons.inventory_outlined),
-              label: const Text('Pronto para retirada'),
-            ),
+            if (job.status != JobStatus.readyPickup &&
+                job.status != JobStatus.delivered)
+              OutlinedButton.icon(
+                onPressed: () => _showMarkReady(context),
+                icon: const Icon(Icons.inventory_outlined),
+                label: const Text('Pronto para retirada'),
+              ),
+            if (job.status == JobStatus.readyPickup)
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${job.title} marcado como entregue.',
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Marcar como entregue'),
+              ),
           ],
         );
       },
+    );
+  }
+
+  void _showUpdateClient(BuildContext context) {
+    final messageCtrl = TextEditingController(
+      text: 'Seu pedido "${job.title}" esta em andamento. '
+          '${job.unitsDone} de ${job.unitsTotal} unidades prontas.',
+    );
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Atualizar cliente'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enviar mensagem para ${job.client.name}',
+                style: TextStyle(
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: messageCtrl,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Mensagem para o cliente',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          GradientButton(
+            label: 'Enviar',
+            compact: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Mensagem enviada para ${job.client.name}.',
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMarkReady(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pronto para retirada?'),
+        content: Text(
+          'Confirma que "${job.title}" esta pronto para ${job.client.name} retirar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          GradientButton(
+            label: 'Confirmar',
+            compact: true,
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '${job.title} marcado como pronto para retirada.',
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
