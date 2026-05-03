@@ -21,6 +21,14 @@ class CustomerOrderPage extends StatefulWidget {
 
 class _CustomerOrderPageState extends State<CustomerOrderPage> {
   final _emailLookupCtrl = TextEditingController(text: 'marina@email.com');
+  int? _initialTab;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Read route arguments only once
+    _initialTab ??= ModalRoute.of(context)?.settings.arguments as int? ?? 0;
+  }
 
   @override
   void dispose() {
@@ -32,8 +40,9 @@ class _CustomerOrderPageState extends State<CustomerOrderPage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: _initialTab ?? 0,
       child: Builder(
-        builder: (ctx) => PublicShell(
+        builder: (ctx) => _OrderShell(
           onOpenAdmin: widget.onOpenAdmin == null
               ? null
               : () => widget.onOpenAdmin!(ctx),
@@ -43,20 +52,24 @@ class _CustomerOrderPageState extends State<CustomerOrderPage> {
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: SoftPanel(
                   padding: EdgeInsets.all(4),
-                  child: TabBar(tabs: [
-                    Tab(text: 'Novo pedido'),
-                    Tab(text: 'Meus pedidos'),
-                  ]),
+                  child: TabBar(
+                    tabs: [
+                      Tab(text: 'Criar pedido'),
+                      Tab(text: 'Acompanhar pedidos'),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
-                child: TabBarView(children: [
-                  OrderWizard(repository: widget.repository),
-                  OrderLookupView(
-                    repository: widget.repository,
-                    controller: _emailLookupCtrl,
-                  ),
-                ]),
+                child: TabBarView(
+                  children: [
+                    OrderWizard(repository: widget.repository),
+                    OrderLookupView(
+                      repository: widget.repository,
+                      controller: _emailLookupCtrl,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -66,23 +79,27 @@ class _CustomerOrderPageState extends State<CustomerOrderPage> {
   }
 }
 
-class PublicShell extends StatelessWidget {
-  const PublicShell({super.key, required this.child, this.onOpenAdmin});
+// ---------------------------------------------------------------------------
+// Shell — full-width scaffold, content constrained per-section
+// ---------------------------------------------------------------------------
+
+class _OrderShell extends StatelessWidget {
+  const _OrderShell({required this.child, this.onOpenAdmin});
   final Widget child;
   final VoidCallback? onOpenAdmin;
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 980;
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             _TopBar(onOpenAdmin: onOpenAdmin),
             Expanded(
-              child: Center(
+              child: Align(
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: wide ? 860 : double.infinity),
+                  constraints: const BoxConstraints(maxWidth: 860),
                   child: child,
                 ),
               ),
@@ -94,32 +111,49 @@ class PublicShell extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Top bar — with back navigation to landing
+// ---------------------------------------------------------------------------
+
 class _TopBar extends StatelessWidget {
   const _TopBar({this.onOpenAdmin});
   final VoidCallback? onOpenAdmin;
 
   @override
   Widget build(BuildContext context) {
+    final canPop = Navigator.of(context).canPop();
+
     return Container(
       height: 68,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35),
+            color: Theme.of(
+              context,
+            ).colorScheme.outlineVariant.withValues(alpha: 0.35),
           ),
         ),
       ),
       child: Row(
         children: [
+          if (canPop) ...[
+            IconButton(
+              tooltip: 'Voltar',
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+            const SizedBox(width: 4),
+          ],
           const BrandMark(),
           const Spacer(),
-          IconButton.filledTonal(
-            tooltip: 'Admin',
-            onPressed: onOpenAdmin,
-            icon: const Icon(Icons.shield_outlined, size: 20),
-          ),
+          if (onOpenAdmin != null)
+            IconButton.filledTonal(
+              tooltip: 'Admin',
+              onPressed: onOpenAdmin,
+              icon: const Icon(Icons.shield_outlined, size: 20),
+            ),
         ],
       ),
     );

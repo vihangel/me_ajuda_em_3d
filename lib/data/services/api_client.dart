@@ -9,7 +9,7 @@ import 'token_service.dart';
 /// Central API client with automatic Bearer token and 401 refresh.
 class ApiClient {
   ApiClient(this._tokenService, {http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final TokenService _tokenService;
   final http.Client _client;
@@ -23,18 +23,13 @@ class ApiClient {
   // Public HTTP methods
   // -------------------------------------------------------------------------
 
-  Future<dynamic> get(
-    String path, {
-    Map<String, String>? queryParams,
-  }) async {
-    final uri =
-        Uri.parse('$_baseUrl$path').replace(queryParameters: queryParams);
+  Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
+    final uri = Uri.parse(
+      '$_baseUrl$path',
+    ).replace(queryParameters: queryParams);
     final headers = await _headers();
     final response = await _client.get(uri, headers: headers);
-    return _handleResponse(
-      response,
-      () => get(path, queryParams: queryParams),
-    );
+    return _handleResponse(response, () => get(path, queryParams: queryParams));
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
@@ -97,8 +92,13 @@ class ApiClient {
     Future<dynamic> Function() retry,
   ) async {
     if (response.statusCode >= 400) {
-      final body =
-          response.body.isNotEmpty ? jsonDecode(response.body) : const {};
+      // Guard against non-JSON error bodies (e.g. HTML from a proxy or 404).
+      dynamic body;
+      try {
+        body = response.body.isNotEmpty ? jsonDecode(response.body) : const {};
+      } catch (_) {
+        body = const {};
+      }
       final message =
           (body is Map ? body['error'] : null) ?? 'Erro desconhecido';
 
@@ -113,7 +113,16 @@ class ApiClient {
     }
 
     if (response.body.isEmpty) return null;
-    return jsonDecode(response.body);
+
+    // Guard against non-JSON success bodies.
+    try {
+      return jsonDecode(response.body);
+    } on FormatException {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Resposta invalida do servidor (nao e JSON).',
+      );
+    }
   }
 
   Future<bool> _tryRefresh() async {

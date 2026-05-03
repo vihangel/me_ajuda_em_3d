@@ -43,6 +43,28 @@ IconData catalogIcon(String imageTag) {
   };
 }
 
+/// Display name mais descritivo para categorias vagas
+String categoryDisplayName(String icon, String fallback) {
+  return switch (icon) {
+    'decor' => 'Objetos decorativos',
+    _ when fallback.toLowerCase() == 'outros' => 'Outro tipo de peca',
+    _ => fallback,
+  };
+}
+
+/// Descrição curta para cada categoria (ajuda quem não entende 3D)
+String categoryShortDesc(String icon) {
+  return switch (icon) {
+    'key' => 'Pecas pequenas personalizadas',
+    'miniature' => 'Personagens e modelos detalhados',
+    'decor' => 'Vasos, enfeites e objetos unicos',
+    'frame' => 'Letreiros e sinalizacao',
+    'lamp' => 'Luminarias e litofanias',
+    'image' => 'Pecas a partir de foto ou desenho',
+    _ => 'Descreva sua ideia e orcamos',
+  };
+}
+
 Color orderStatusColor(CustomerOrderStatus status, ColorScheme colors) {
   return switch (status) {
     CustomerOrderStatus.received => colors.primary,

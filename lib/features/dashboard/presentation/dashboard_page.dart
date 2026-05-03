@@ -39,7 +39,7 @@ class DashboardPage extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               sliver: SliverGrid.count(
                 crossAxisCount: switch (MediaQuery.sizeOf(context).width) {
-                  > 1100 => 5,
+                  > 1100 => 4,
                   > 700 => 3,
                   _ => 2,
                 },
@@ -47,6 +47,12 @@ class DashboardPage extends StatelessWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.45,
                 children: [
+                  MetricCard(
+                    label: 'Pedidos pendentes',
+                    value: '${summary.pendingOrders}',
+                    icon: Icons.shopping_bag_outlined,
+                    color: const Color(0xFF4865F4),
+                  ),
                   MetricCard(
                     label: 'Orcamentos pendentes',
                     value: '${summary.pendingQuotes}',
@@ -76,6 +82,12 @@ class DashboardPage extends StatelessWidget {
                     value: '${summary.criticalDeadlines}',
                     icon: Icons.timer_outlined,
                     color: Colors.red.shade700,
+                  ),
+                  MetricCard(
+                    label: 'Portal: ativos',
+                    value: '${summary.portalActiveProducts}',
+                    icon: Icons.storefront_outlined,
+                    color: Colors.teal.shade700,
                   ),
                 ],
               ),

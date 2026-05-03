@@ -67,7 +67,7 @@ class _ClientsPageState extends State<ClientsPage> {
               return ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 itemCount: clients.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, i) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final client = clients[index];
                   return _ClientCard(
@@ -116,10 +116,9 @@ class _ClientCard extends StatelessWidget {
               children: [
                 Text(
                   client.name,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -130,9 +129,9 @@ class _ClientCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     client.lastQuoteLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.outline,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colors.outline),
                   ),
                 ],
               ],
@@ -181,16 +180,14 @@ class _ClientCard extends StatelessWidget {
                     children: [
                       Text(
                         client.name,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       AppStatusChip(
                         label: client.currentStatus,
-                        color: _clientStatusColor(
-                            client.currentStatus, colors),
+                        color: _clientStatusColor(client.currentStatus, colors),
                       ),
                     ],
                   ),
@@ -303,9 +300,7 @@ class _ClientCard extends StatelessWidget {
               Navigator.pop(context);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${nameCtrl.text} atualizado.'),
-                ),
+                SnackBar(content: Text('${nameCtrl.text} atualizado.')),
               );
             },
           ),
@@ -343,9 +338,9 @@ class _DetailRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.outline,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.outline),
                 ),
                 const SizedBox(height: 2),
                 Text(value),

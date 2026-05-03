@@ -8,7 +8,7 @@ import 'token_service.dart';
 /// Handles login and registration against /api/auth.
 class AuthService {
   AuthService(this._tokenService, {http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final TokenService _tokenService;
   final http.Client _client;
@@ -18,16 +18,34 @@ class AuthService {
   bool get isLoggedIn => _tokenService.hasTokens;
 
   Future<void> login({required String email, required String password}) async {
-    final res = await _client.post(
-      Uri.parse('$_authUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
-    );
-    if (res.statusCode != 200) {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      throw AuthException(body['error']?.toString() ?? 'Erro ao fazer login');
+    final http.Response res;
+    try {
+      res = await _client.post(
+        Uri.parse('$_authUrl/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+    } catch (e) {
+      throw AuthException('Servidor indisponivel. Tente novamente.');
     }
-    final data = jsonDecode(res.body);
+    if (res.statusCode != 200) {
+      dynamic body;
+      try {
+        body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
+      } catch (_) {
+        body = {};
+      }
+      throw AuthException(
+        (body is Map ? body['error']?.toString() : null) ??
+            'Erro ao fazer login',
+      );
+    }
+    dynamic data;
+    try {
+      data = jsonDecode(res.body);
+    } catch (_) {
+      throw AuthException('Resposta invalida do servidor.');
+    }
     await _tokenService.saveTokens(
       data['accessToken'] as String,
       data['refreshToken'] as String,
@@ -39,16 +57,34 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final res = await _client.post(
-      Uri.parse('$_authUrl/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name, 'email': email, 'password': password}),
-    );
-    if (res.statusCode != 201 && res.statusCode != 200) {
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      throw AuthException(body['error']?.toString() ?? 'Erro ao criar conta');
+    final http.Response res;
+    try {
+      res = await _client.post(
+        Uri.parse('$_authUrl/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name, 'email': email, 'password': password}),
+      );
+    } catch (e) {
+      throw AuthException('Servidor indisponivel. Tente novamente.');
     }
-    final data = jsonDecode(res.body);
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      dynamic body;
+      try {
+        body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
+      } catch (_) {
+        body = {};
+      }
+      throw AuthException(
+        (body is Map ? body['error']?.toString() : null) ??
+            'Erro ao criar conta',
+      );
+    }
+    dynamic data;
+    try {
+      data = jsonDecode(res.body);
+    } catch (_) {
+      throw AuthException('Resposta invalida do servidor.');
+    }
     await _tokenService.saveTokens(
       data['accessToken'] as String,
       data['refreshToken'] as String,

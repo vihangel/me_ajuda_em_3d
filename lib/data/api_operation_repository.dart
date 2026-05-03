@@ -12,20 +12,47 @@ class ApiOperationRepository implements OperationRepository {
 
   final ApiClient client;
 
+  /// Helper: GET que retorna lista, tratando 404 e erros de parse.
+  Future<List<dynamic>> _safeGetList(
+    String path, {
+    Map<String, String>? queryParams,
+  }) async {
+    try {
+      final data = await client.get(path, queryParams: queryParams);
+      if (data == null) return const [];
+      if (data is List) return data;
+      return const [];
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return const [];
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Dashboard
   // ---------------------------------------------------------------------------
 
   @override
   Future<DashboardSummary> getDashboardSummary() async {
-    final data = await client.get('/dashboard') as Map<String, dynamic>;
-    return DashboardSummary(
-      pendingQuotes: data['pendingQuotes'] as int? ?? 0,
-      inProduction: data['inProduction'] as int? ?? 0,
-      readyPickup: data['readyPickup'] as int? ?? 0,
-      lowFilaments: data['lowFilaments'] as int? ?? 0,
-      criticalDeadlines: data['criticalDeadlines'] as int? ?? 0,
-    );
+    try {
+      final raw = await client.get('/dashboard');
+      final data = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+      return DashboardSummary(
+        pendingQuotes: data['pendingQuotes'] as int? ?? 0,
+        inProduction: data['inProduction'] as int? ?? 0,
+        readyPickup: data['readyPickup'] as int? ?? 0,
+        lowFilaments: data['lowFilaments'] as int? ?? 0,
+        criticalDeadlines: data['criticalDeadlines'] as int? ?? 0,
+      );
+    } on ApiException {
+      return const DashboardSummary(
+        pendingQuotes: 0,
+        inProduction: 0,
+        readyPickup: 0,
+        lowFilaments: 0,
+        criticalDeadlines: 0,
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -34,13 +61,13 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<Filament>> getFilaments() async {
-    final list = await client.get('/materials') as List;
+    final list = await _safeGetList('/materials');
     return list.map((e) => _parseFilament(e as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<List<SupplyItem>> getSupplies() async {
-    final list = await client.get('/supplies') as List;
+    final list = await _safeGetList('/supplies');
     return list.map((e) => _parseSupply(e as Map<String, dynamic>)).toList();
   }
 
@@ -76,7 +103,7 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<QuoteTemplate>> getTemplates() async {
-    final list = await client.get('/templates') as List;
+    final list = await _safeGetList('/templates');
     return list.map((e) {
       final m = e as Map<String, dynamic>;
       return QuoteTemplate(
@@ -94,7 +121,7 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<Quote>> getQuotes() async {
-    final list = await client.get('/quotes') as List;
+    final list = await _safeGetList('/quotes');
     return list.map((e) => _parseQuote(e as Map<String, dynamic>)).toList();
   }
 
@@ -104,9 +131,8 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<ProductionJob>> getJobs() async {
-    final list = await client.get('/jobs') as List;
-    final jobs =
-        list.map((e) => _parseJob(e as Map<String, dynamic>)).toList();
+    final list = await _safeGetList('/jobs');
+    final jobs = list.map((e) => _parseJob(e as Map<String, dynamic>)).toList();
     return buildQueueOrder(jobs);
   }
 
@@ -116,7 +142,7 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<P3dClient>> getClients() async {
-    final list = await client.get('/clients') as List;
+    final list = await _safeGetList('/clients');
     return list.map((e) => _parseClient(e as Map<String, dynamic>)).toList();
   }
 
@@ -142,7 +168,7 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<CustomerProduct>> getCustomerProducts() async {
-    final list = await client.get('/customer-products') as List;
+    final list = await _safeGetList('/customer-products');
     return list.map((e) {
       final m = e as Map<String, dynamic>;
       return CustomerProduct(
@@ -159,12 +185,10 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<CatalogItem>> getCatalogItems(String categoryId) async {
-    final data = await client.get(
+    final list = await _safeGetList(
       '/catalog',
       queryParams: {'categoryId': categoryId},
     );
-    if (data == null) return const [];
-    final list = data as List;
     return list.map((e) {
       final m = e as Map<String, dynamic>;
       return CatalogItem(
@@ -181,10 +205,10 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<CustomerOrder>> getCustomerOrdersByEmail(String email) async {
-    final list = await client.get(
+    final list = await _safeGetList(
       '/customer-orders',
       queryParams: {'email': email.trim().toLowerCase()},
-    ) as List;
+    );
     return list
         .map((e) => _parseCustomerOrder(e as Map<String, dynamic>))
         .toList();
@@ -212,16 +236,12 @@ class ApiOperationRepository implements OperationRepository {
     String id,
     CustomerOrderStatus status,
   ) async {
-    await client.patch('/customer-orders/$id/status', {
-      'status': status.name,
-    });
+    await client.patch('/customer-orders/$id/status', {'status': status.name});
   }
 
   @override
   Future<void> updateJobStatus(String id, JobStatus status) async {
-    await client.patch('/jobs/$id/status', {
-      'status': status.name,
-    });
+    await client.patch('/jobs/$id/status', {'status': status.name});
   }
 
   @override
@@ -235,47 +255,55 @@ class ApiOperationRepository implements OperationRepository {
 
   @override
   Future<List<GlobalSearchResult>> search(String query) async {
-    final data = await client.get('/search', queryParams: {'q': query});
-    if (data == null) return const [];
-    final map = data as Map<String, dynamic>;
-    final results = <GlobalSearchResult>[];
+    try {
+      final data = await client.get('/search', queryParams: {'q': query});
+      if (data == null) return const [];
+      final map = data is Map<String, dynamic> ? data : <String, dynamic>{};
+      final results = <GlobalSearchResult>[];
 
-    for (final order in (map['orders'] as List?) ?? []) {
-      final m = order as Map<String, dynamic>;
-      results.add(GlobalSearchResult(
-        title: '#${m['code']} ${m['productTitle']}',
-        subtitle: '${m['customerName']} • ${m['status']}',
-        type: 'Pedido',
-        icon: 'order',
-      ));
-    }
-    for (final c in (map['clients'] as List?) ?? []) {
-      final m = c as Map<String, dynamic>;
-      results.add(GlobalSearchResult(
-        title: m['name'] as String? ?? '',
-        subtitle: '${m['phone']} • ${m['channel']}',
-        type: 'Cliente',
-        icon: 'client',
-      ));
-    }
-    for (final mat in (map['materials'] as List?) ?? []) {
-      final m = mat as Map<String, dynamic>;
-      results.add(GlobalSearchResult(
-        title: '${m['material']} ${m['colorName']}',
-        subtitle: '${m['brand']} • ${m['remainingGrams']}g',
-        type: 'Material',
-        icon: 'material',
-      ));
-    }
+      for (final order in (map['orders'] as List?) ?? []) {
+        final m = order as Map<String, dynamic>;
+        results.add(
+          GlobalSearchResult(
+            title: '#${m['code']} ${m['productTitle']}',
+            subtitle: '${m['customerName']} • ${m['status']}',
+            type: 'Pedido',
+            icon: 'order',
+          ),
+        );
+      }
+      for (final c in (map['clients'] as List?) ?? []) {
+        final m = c as Map<String, dynamic>;
+        results.add(
+          GlobalSearchResult(
+            title: m['name'] as String? ?? '',
+            subtitle: '${m['phone']} • ${m['channel']}',
+            type: 'Cliente',
+            icon: 'client',
+          ),
+        );
+      }
+      for (final mat in (map['materials'] as List?) ?? []) {
+        final m = mat as Map<String, dynamic>;
+        results.add(
+          GlobalSearchResult(
+            title: '${m['material']} ${m['colorName']}',
+            subtitle: '${m['brand']} • ${m['remainingGrams']}g',
+            type: 'Material',
+            icon: 'material',
+          ),
+        );
+      }
 
-    return results.take(12).toList();
+      return results.take(12).toList();
+    } on ApiException {
+      return const [];
+    }
   }
 
   @override
   Future<List<AppNotification>> getNotifications() async {
-    final data = await client.get('/notifications');
-    if (data == null) return const [];
-    final list = data as List;
+    final list = await _safeGetList('/notifications');
     return list.map((e) {
       final m = e as Map<String, dynamic>;
       return AppNotification(
@@ -283,10 +311,197 @@ class ApiOperationRepository implements OperationRepository {
         title: m['title'] as String? ?? '',
         message: m['message'] as String? ?? '',
         severity: m['severity'] as String? ?? 'warning',
-        createdAt: DateTime.tryParse(m['createdAt']?.toString() ?? '') ??
+        createdAt:
+            DateTime.tryParse(m['createdAt']?.toString() ?? '') ??
             DateTime.now(),
       );
     }).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Portal do cliente
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<P3dClient?> portalLogin(String code) async {
+    try {
+      // Busca nos clientes normais pelo portalCode
+      final list = await _safeGetList(
+        '/clients',
+        queryParams: {'portalCode': code.trim().toLowerCase()},
+      );
+      if (list.isEmpty) {
+        // Fallback: busca todos e filtra localmente
+        final all = await _safeGetList('/clients');
+        final normalized = code.trim().toLowerCase();
+        for (final e in all) {
+          final m = e as Map<String, dynamic>;
+          final pc = m['portalCode'] as String? ?? '';
+          if (pc.isNotEmpty && pc.toLowerCase() == normalized) {
+            return _parseClient(m);
+          }
+        }
+        return null;
+      }
+      return _parseClient(list.first as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<PortalProduct>> getPortalProducts(String clientId) async {
+    final list = await _safeGetList(
+      '/portal/products',
+      queryParams: {'clientId': clientId},
+    );
+    return list.map((e) {
+      final m = e as Map<String, dynamic>;
+      return _parsePortalProduct(m);
+    }).toList();
+  }
+
+  @override
+  Future<PortalProduct> createPortalOrderRequest(
+    String clientCode,
+    PortalOrderRequest request,
+  ) async {
+    try {
+      final data = await client.post('/portal/orders', {
+        'code': clientCode,
+        'productTitle': request.productTitle,
+        'description': request.description,
+        'quantity': request.quantity,
+        'costPriceCents': request.costPriceCents,
+        'unitPriceCents': request.sellPriceCents,
+        'imageUrl': request.imageUrl,
+      });
+      return _parsePortalProduct(data as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        // Backend nao tem o endpoint ainda — cria localmente
+        final now = DateTime.now();
+        return PortalProduct(
+          id: 'local-${now.millisecondsSinceEpoch}',
+          title: request.productTitle,
+          description: request.description,
+          quantity: request.quantity,
+          paidQuantity: 0,
+          unitPriceCents: request.sellPriceCents,
+          costPriceCents: request.costPriceCents,
+          imageUrl: request.imageUrl,
+          status: PortalProductStatus.producing,
+          paymentStatus: PortalProductPaymentStatus.pending,
+          createdAt: now,
+          updatedAt: now,
+        );
+      }
+      rethrow;
+    }
+  }
+
+  static PortalProduct _parsePortalProduct(
+    Map<String, dynamic> m,
+  ) => PortalProduct(
+    id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
+    title: m['title'] as String? ?? '',
+    description: m['description'] as String? ?? '',
+    quantity: m['quantity'] as int? ?? 0,
+    paidQuantity: m['paidQuantity'] as int? ?? 0,
+    unitPriceCents: m['unitPriceCents'] as int? ?? 0,
+    costPriceCents: m['costPriceCents'] as int? ?? 0,
+    imageUrl: m['imageUrl'] as String? ?? '',
+    status: PortalProductStatus.values.firstWhere(
+      (s) => s.name == (m['status'] as String? ?? 'producing'),
+      orElse: () => PortalProductStatus.producing,
+    ),
+    paymentStatus: PortalProductPaymentStatus.values.firstWhere(
+      (s) => s.name == (m['paymentStatus'] as String? ?? 'pending'),
+      orElse: () => PortalProductPaymentStatus.pending,
+    ),
+    createdAt:
+        DateTime.tryParse(m['createdAt']?.toString() ?? '') ?? DateTime.now(),
+    updatedAt:
+        DateTime.tryParse(m['updatedAt']?.toString() ?? '') ?? DateTime.now(),
+  );
+
+  @override
+  Future<List<P3dClient>> getPortalClients() async {
+    final list = await _safeGetList('/clients');
+    return list
+        .map((e) => _parseClient(e as Map<String, dynamic>))
+        .where((c) => c.hasPortalAccess)
+        .toList();
+  }
+
+  @override
+  Future<P3dClient> createPortalClient({
+    required String name,
+    required String phone,
+    required String channel,
+    required String notes,
+    required String portalCode,
+    required String companyName,
+    required int employeeCount,
+  }) async {
+    try {
+      final data = await client.post('/clients', {
+        'name': name,
+        'phone': phone,
+        'channel': channel,
+        'notes': notes,
+        'portalCode': portalCode,
+        'companyName': companyName,
+        'employeeCount': employeeCount,
+      });
+      return _parseClient(data as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw ApiException(
+          statusCode: 404,
+          message: 'Endpoint /clients nao existe no backend.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> updatePortalProductStatus(
+    String productId,
+    PortalProductStatus status,
+  ) async {
+    try {
+      await client.patch('/portal/products/$productId/status', {
+        'status': status.name,
+      });
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return; // endpoint nao existe ainda
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> updatePortalProductPayment(
+    String productId,
+    int paidQuantity,
+  ) async {
+    try {
+      await client.patch('/portal/products/$productId/payment', {
+        'paidQuantity': paidQuantity,
+      });
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return; // endpoint nao existe ainda
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<CustomerOrder>> getAllCustomerOrders() async {
+    final list = await _safeGetList('/customer-orders');
+    return list
+        .map((e) => _parseCustomerOrder(e as Map<String, dynamic>))
+        .toList();
   }
 
   // ---------------------------------------------------------------------------
@@ -294,65 +509,70 @@ class ApiOperationRepository implements OperationRepository {
   // ---------------------------------------------------------------------------
 
   static Filament _parseFilament(Map<String, dynamic> m) => Filament(
-        id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
-        brand: m['brand'] as String? ?? '',
-        material: m['material'] as String? ?? '',
-        finish: m['finish'] as String? ?? '',
-        colorName: m['colorName'] as String? ?? '',
-        colorHex: m['colorHex'] as int? ?? 0xFF888888,
-        rollGrams: m['rollGrams'] as int? ?? 1000,
-        remainingGrams: m['remainingGrams'] as int? ?? 0,
-        costCents: m['costCents'] as int? ?? 0,
-        lowStockGrams: m['lowStockGrams'] as int? ?? 200,
-        lot: m['lot'] as String? ?? '',
-      );
+    id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
+    brand: m['brand'] as String? ?? '',
+    material: m['material'] as String? ?? '',
+    finish: m['finish'] as String? ?? '',
+    colorName: m['colorName'] as String? ?? '',
+    colorHex: m['colorHex'] as int? ?? 0xFF888888,
+    rollGrams: m['rollGrams'] as int? ?? 1000,
+    remainingGrams: m['remainingGrams'] as int? ?? 0,
+    costCents: m['costCents'] as int? ?? 0,
+    lowStockGrams: m['lowStockGrams'] as int? ?? 200,
+    lot: m['lot'] as String? ?? '',
+  );
 
   static SupplyItem _parseSupply(Map<String, dynamic> m) => SupplyItem(
-        id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
-        title: m['title'] as String? ?? '',
-        category: m['category'] as String? ?? '',
-        quantity: m['quantity'] as int? ?? 0,
-        minimumQuantity: m['minimumQuantity'] as int? ?? 0,
-        unitCostCents: m['unitCostCents'] as int? ?? 0,
-      );
+    id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
+    title: m['title'] as String? ?? '',
+    category: m['category'] as String? ?? '',
+    quantity: m['quantity'] as int? ?? 0,
+    minimumQuantity: m['minimumQuantity'] as int? ?? 0,
+    unitCostCents: m['unitCostCents'] as int? ?? 0,
+  );
 
   static P3dClient _parseClient(Map<String, dynamic> m) => P3dClient(
-        id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
-        name: m['name'] as String? ?? '',
-        phone: m['phone'] as String? ?? '',
-        channel: m['channel'] as String? ?? '',
-        notes: m['notes'] as String? ?? '',
-        currentStatus: m['currentStatus'] as String? ?? 'Novo',
-        lastQuoteLabel: m['lastQuoteLabel'] as String? ?? 'Sem orcamento',
-      );
+    id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
+    name: m['name'] as String? ?? '',
+    phone: m['phone'] as String? ?? '',
+    channel: m['channel'] as String? ?? '',
+    notes: m['notes'] as String? ?? '',
+    currentStatus: m['currentStatus'] as String? ?? 'Novo',
+    lastQuoteLabel: m['lastQuoteLabel'] as String? ?? 'Sem orcamento',
+    portalCode: m['portalCode'] as String? ?? '',
+    companyName: m['companyName'] as String? ?? '',
+    employeeCount: m['employeeCount'] as int? ?? 0,
+  );
 
-  static CustomerOrder _parseCustomerOrder(Map<String, dynamic> m) =>
-      CustomerOrder(
-        id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
-        code: m['code'] as String? ?? '',
-        customerName: m['customerName'] as String? ?? '',
-        email: m['email'] as String? ?? '',
-        phone: m['phone'] as String? ?? '',
-        kind: CustomerKind.values.firstWhere(
-          (k) => k.name == (m['kind'] as String? ?? 'person'),
-          orElse: () => CustomerKind.person,
-        ),
-        productTitle: m['productTitle'] as String? ?? '',
-        description: m['description'] as String? ?? '',
-        quantity: m['quantity'] as int? ?? 1,
-        hasReferenceImage: m['hasReferenceImage'] as bool? ?? false,
-        status: CustomerOrderStatus.values.firstWhere(
-          (s) => s.name == (m['status'] as String? ?? 'received'),
-          orElse: () => CustomerOrderStatus.received,
-        ),
-        createdAt: DateTime.tryParse(m['createdAt']?.toString() ?? '') ??
-            DateTime.now(),
-        updatedAt: DateTime.tryParse(m['updatedAt']?.toString() ?? '') ??
-            DateTime.now(),
-      );
+  static CustomerOrder _parseCustomerOrder(
+    Map<String, dynamic> m,
+  ) => CustomerOrder(
+    id: m['_id']?.toString() ?? m['id']?.toString() ?? '',
+    code: m['code'] as String? ?? '',
+    customerName: m['customerName'] as String? ?? '',
+    email: m['email'] as String? ?? '',
+    phone: m['phone'] as String? ?? '',
+    kind: CustomerKind.values.firstWhere(
+      (k) => k.name == (m['kind'] as String? ?? 'person'),
+      orElse: () => CustomerKind.person,
+    ),
+    productTitle: m['productTitle'] as String? ?? '',
+    description: m['description'] as String? ?? '',
+    quantity: m['quantity'] as int? ?? 1,
+    hasReferenceImage: m['hasReferenceImage'] as bool? ?? false,
+    status: CustomerOrderStatus.values.firstWhere(
+      (s) => s.name == (m['status'] as String? ?? 'received'),
+      orElse: () => CustomerOrderStatus.received,
+    ),
+    createdAt:
+        DateTime.tryParse(m['createdAt']?.toString() ?? '') ?? DateTime.now(),
+    updatedAt:
+        DateTime.tryParse(m['updatedAt']?.toString() ?? '') ?? DateTime.now(),
+  );
 
   static Quote _parseQuote(Map<String, dynamic> m) {
-    final items = (m['items'] as List?)?.map((e) {
+    final items =
+        (m['items'] as List?)?.map((e) {
           final i = e as Map<String, dynamic>;
           return QuoteItem(
             title: i['title'] as String? ?? '',
@@ -379,8 +599,8 @@ class ApiOperationRepository implements OperationRepository {
       items: items,
       discountCents: m['discountCents'] as int? ?? 0,
       deadlineDays: m['deadlineDays'] as int? ?? 3,
-      createdAt: DateTime.tryParse(m['createdAt']?.toString() ?? '') ??
-          DateTime.now(),
+      createdAt:
+          DateTime.tryParse(m['createdAt']?.toString() ?? '') ?? DateTime.now(),
       approvedAt: m['approvedAt'] != null
           ? DateTime.tryParse(m['approvedAt'].toString())
           : null,
@@ -389,7 +609,8 @@ class ApiOperationRepository implements OperationRepository {
   }
 
   static ProductionJob _parseJob(Map<String, dynamic> m) {
-    final updates = (m['updates'] as List?)?.map((e) {
+    final updates =
+        (m['updates'] as List?)?.map((e) {
           final u = e as Map<String, dynamic>;
           return JobUpdate(
             statusSnapshot: JobStatus.values.firstWhere(
@@ -400,7 +621,8 @@ class ApiOperationRepository implements OperationRepository {
             messageInternal: u['messageInternal'] as String? ?? '',
             messageClient: u['messageClient'] as String? ?? '',
             sentToClient: u['sentToClient'] as bool? ?? false,
-            createdAt: DateTime.tryParse(u['createdAt']?.toString() ?? '') ??
+            createdAt:
+                DateTime.tryParse(u['createdAt']?.toString() ?? '') ??
                 DateTime.now(),
           );
         }).toList() ??
@@ -420,7 +642,8 @@ class ApiOperationRepository implements OperationRepository {
       unitsTotal: m['unitsTotal'] as int? ?? 0,
       unitsDone: m['unitsDone'] as int? ?? 0,
       unitsFailed: m['unitsFailed'] as int? ?? 0,
-      dueAt: DateTime.tryParse(m['dueAt']?.toString() ?? '') ??
+      dueAt:
+          DateTime.tryParse(m['dueAt']?.toString() ?? '') ??
           DateTime.now().add(const Duration(days: 7)),
       material: m['material'] as String? ?? '',
       updates: updates,

@@ -186,6 +186,8 @@ class DashboardSummary {
     required this.readyPickup,
     required this.lowFilaments,
     required this.criticalDeadlines,
+    this.pendingOrders = 0,
+    this.portalActiveProducts = 0,
   });
 
   final int pendingQuotes;
@@ -193,6 +195,8 @@ class DashboardSummary {
   final int readyPickup;
   final int lowFilaments;
   final int criticalDeadlines;
+  final int pendingOrders;
+  final int portalActiveProducts;
 }
 
 class P3dClient {
@@ -204,6 +208,9 @@ class P3dClient {
     required this.notes,
     required this.currentStatus,
     required this.lastQuoteLabel,
+    this.portalCode = '',
+    this.companyName = '',
+    this.employeeCount = 0,
   });
 
   final String id;
@@ -213,6 +220,18 @@ class P3dClient {
   final String notes;
   final String currentStatus;
   final String lastQuoteLabel;
+
+  /// Codigo de acesso ao portal (ex: luiz-a-banca). Vazio = sem portal.
+  final String portalCode;
+
+  /// Nome da empresa (para clientes do portal).
+  final String companyName;
+
+  /// Numero de funcionarios (para clientes do portal).
+  final int employeeCount;
+
+  /// Se o cliente tem acesso ao portal.
+  bool get hasPortalAccess => portalCode.isNotEmpty;
 }
 
 class Filament {
@@ -404,6 +423,92 @@ class ProductionJob {
   final DateTime? readyAt;
 
   int get unitsRemaining => unitsTotal - unitsDone - unitsFailed;
+}
+
+// ---------------------------------------------------------------------------
+// Portal do Cliente — modelos
+// ---------------------------------------------------------------------------
+
+enum PortalProductStatus {
+  producing('Produzindo'),
+  finishing('Finalizando'),
+  delivering('Em entrega'),
+  delivered('Entregue');
+
+  const PortalProductStatus(this.label);
+  final String label;
+}
+
+enum PortalProductPaymentStatus {
+  pending('Pendente'),
+  paid('Pago');
+
+  const PortalProductPaymentStatus(this.label);
+  final String label;
+}
+
+class PortalProduct {
+  const PortalProduct({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.quantity,
+    required this.paidQuantity,
+    required this.unitPriceCents,
+    required this.status,
+    required this.paymentStatus,
+    required this.createdAt,
+    required this.updatedAt,
+    this.costPriceCents = 0,
+    this.imageUrl = '',
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final int quantity;
+  final int paidQuantity;
+
+  /// Preco de venda por unidade (visivel ao cliente).
+  final int unitPriceCents;
+
+  /// Preco de custo por unidade (visivel apenas ao admin).
+  final int costPriceCents;
+
+  /// URL da imagem do produto.
+  final String imageUrl;
+
+  final PortalProductStatus status;
+  final PortalProductPaymentStatus paymentStatus;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  int get pendingQuantity => quantity - paidQuantity;
+  double get paidRatio => quantity > 0 ? paidQuantity / quantity : 0;
+  int get totalCents => quantity * unitPriceCents;
+  int get paidCents => paidQuantity * unitPriceCents;
+  int get pendingCents => pendingQuantity * unitPriceCents;
+  int get totalCostCents => quantity * costPriceCents;
+  int get profitCents => totalCents - totalCostCents;
+  bool get hasImage => imageUrl.isNotEmpty;
+}
+
+class PortalOrderRequest {
+  const PortalOrderRequest({
+    required this.productTitle,
+    required this.description,
+    required this.quantity,
+    this.costPriceCents = 0,
+    this.sellPriceCents = 0,
+    this.imageUrl = '',
+  });
+
+  final String productTitle;
+  final String description;
+  final int quantity;
+  final int costPriceCents;
+  final int sellPriceCents;
+  final String imageUrl;
 }
 
 class QuoteCalculationInput {

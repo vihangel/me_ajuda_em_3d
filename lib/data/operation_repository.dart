@@ -35,10 +35,88 @@ abstract class OperationRepository {
   });
   Future<List<GlobalSearchResult>> search(String query);
   Future<List<AppNotification>> getNotifications();
+
+  // Portal do cliente (usa P3dClient com portalCode)
+  Future<P3dClient?> portalLogin(String code);
+  Future<List<P3dClient>> getPortalClients();
+  Future<List<PortalProduct>> getPortalProducts(String clientId);
+  Future<P3dClient> createPortalClient({
+    required String name,
+    required String phone,
+    required String channel,
+    required String notes,
+    required String portalCode,
+    required String companyName,
+    required int employeeCount,
+  });
+  Future<PortalProduct> createPortalOrderRequest(
+    String clientId,
+    PortalOrderRequest request,
+  );
+  Future<void> updatePortalProductStatus(
+    String productId,
+    PortalProductStatus status,
+  );
+  Future<void> updatePortalProductPayment(String productId, int paidQuantity);
+
+  // Pedidos (admin)
+  Future<List<CustomerOrder>> getAllCustomerOrders();
 }
 
 class InMemoryOperationRepository implements OperationRepository {
   InMemoryOperationRepository();
+
+  // ---------------------------------------------------------------------------
+  // Portal do cliente — produtos vinculados a clientes por clientId
+  // ---------------------------------------------------------------------------
+
+  final List<_PortalProductEntry> _portalProducts = [
+    _PortalProductEntry(
+      clientId: 'cli_001',
+      product: PortalProduct(
+        id: 'pp_001',
+        title: 'Caixinha de figurinha da Copa',
+        description: '200 caixinhas personalizadas com logo da banca.',
+        quantity: 200,
+        paidQuantity: 120,
+        unitPriceCents: 1490,
+        status: PortalProductStatus.producing,
+        paymentStatus: PortalProductPaymentStatus.pending,
+        createdAt: DateTime.now().subtract(const Duration(days: 10)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 6)),
+      ),
+    ),
+    _PortalProductEntry(
+      clientId: 'cli_001',
+      product: PortalProduct(
+        id: 'pp_002',
+        title: 'Chaveiro personalizado',
+        description: '80 chaveiros com nome dos funcionarios.',
+        quantity: 80,
+        paidQuantity: 80,
+        unitPriceCents: 1290,
+        status: PortalProductStatus.delivering,
+        paymentStatus: PortalProductPaymentStatus.paid,
+        createdAt: DateTime.now().subtract(const Duration(days: 20)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+      ),
+    ),
+    _PortalProductEntry(
+      clientId: 'cli_002',
+      product: PortalProduct(
+        id: 'pp_003',
+        title: 'Placa com logo em relevo',
+        description: 'Placa para recepcao do escritorio.',
+        quantity: 1,
+        paidQuantity: 0,
+        unitPriceCents: 5990,
+        status: PortalProductStatus.finishing,
+        paymentStatus: PortalProductPaymentStatus.pending,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 12)),
+      ),
+    ),
+  ];
 
   final List<P3dClient> _clients = [
     const P3dClient(
@@ -49,6 +127,9 @@ class InMemoryOperationRepository implements OperationRepository {
       notes: 'Prefere retirada no fim da tarde.',
       currentStatus: 'Na fila',
       lastQuoteLabel: '#3D-1042 chaveiros PLA',
+      portalCode: 'marina-a-printflow',
+      companyName: 'Atelie Marina',
+      employeeCount: 2,
     ),
     const P3dClient(
       id: 'cli_002',
@@ -58,6 +139,9 @@ class InMemoryOperationRepository implements OperationRepository {
       notes: 'Cliente recorrente de brindes.',
       currentStatus: 'Aguardando aprovacao',
       lastQuoteLabel: '#3D-1046 imas personalizados',
+      portalCode: 'nimbo-s-studionimbo',
+      companyName: 'Studio Nimbo',
+      employeeCount: 4,
     ),
     const P3dClient(
       id: 'cli_003',
@@ -110,7 +194,16 @@ class InMemoryOperationRepository implements OperationRepository {
     final quotes = await getQuotes();
     final jobs = await getJobs();
     final filaments = await getFilaments();
+    final orders = await getAllCustomerOrders();
     final now = DateTime.now();
+
+    // Count active portal products across all clients
+    int portalActive = 0;
+    for (final entry in _portalProducts) {
+      if (entry.product.status != PortalProductStatus.delivered) {
+        portalActive++;
+      }
+    }
 
     return DashboardSummary(
       pendingQuotes: quotes
@@ -140,6 +233,14 @@ class InMemoryOperationRepository implements OperationRepository {
                 job.status != JobStatus.delivered,
           )
           .length,
+      pendingOrders: orders
+          .where(
+            (o) =>
+                o.status != CustomerOrderStatus.closed &&
+                o.status != CustomerOrderStatus.ready,
+          )
+          .length,
+      portalActiveProducts: portalActive,
     );
   }
 
@@ -463,63 +564,107 @@ class InMemoryOperationRepository implements OperationRepository {
   static const _catalogItems = [
     // Chaveiros
     CatalogItem(
-      id: 'ci_01', categoryId: 'cat_keyring',
-      title: 'Chaveiro com nome', description: 'Nome em relevo, ate 10 letras.',
-      style: 'Moderno', priceCents: 1490, imageTag: 'key_name',
+      id: 'ci_01',
+      categoryId: 'cat_keyring',
+      title: 'Chaveiro com nome',
+      description: 'Nome em relevo, ate 10 letras.',
+      style: 'Moderno',
+      priceCents: 1490,
+      imageTag: 'key_name',
     ),
     CatalogItem(
-      id: 'ci_02', categoryId: 'cat_keyring',
-      title: 'Chaveiro com logo', description: 'Logo da empresa ou time.',
-      style: 'Corporativo', priceCents: 1890, imageTag: 'key_logo',
+      id: 'ci_02',
+      categoryId: 'cat_keyring',
+      title: 'Chaveiro com logo',
+      description: 'Logo da empresa ou time.',
+      style: 'Corporativo',
+      priceCents: 1890,
+      imageTag: 'key_logo',
     ),
     CatalogItem(
-      id: 'ci_03', categoryId: 'cat_keyring',
-      title: 'Chaveiro personagem', description: 'Personagem simples estilizado.',
-      style: 'Divertido', priceCents: 2290, imageTag: 'key_char',
+      id: 'ci_03',
+      categoryId: 'cat_keyring',
+      title: 'Chaveiro personagem',
+      description: 'Personagem simples estilizado.',
+      style: 'Divertido',
+      priceCents: 2290,
+      imageTag: 'key_char',
     ),
     // Miniaturas
     CatalogItem(
-      id: 'ci_04', categoryId: 'cat_miniature',
-      title: 'Miniatura de personagem', description: 'Boneco ate 15cm de altura.',
-      style: 'Detalhado', priceCents: 5990, imageTag: 'mini_char',
+      id: 'ci_04',
+      categoryId: 'cat_miniature',
+      title: 'Miniatura de personagem',
+      description: 'Boneco ate 15cm de altura.',
+      style: 'Detalhado',
+      priceCents: 5990,
+      imageTag: 'mini_char',
     ),
     CatalogItem(
-      id: 'ci_05', categoryId: 'cat_miniature',
-      title: 'Peca de RPG/tabuleiro', description: 'Miniaturas para jogos.',
-      style: 'Fantasia', priceCents: 3490, imageTag: 'mini_rpg',
+      id: 'ci_05',
+      categoryId: 'cat_miniature',
+      title: 'Peca de RPG/tabuleiro',
+      description: 'Miniaturas para jogos.',
+      style: 'Fantasia',
+      priceCents: 3490,
+      imageTag: 'mini_rpg',
     ),
     // Decoracao
     CatalogItem(
-      id: 'ci_06', categoryId: 'cat_decor',
-      title: 'Vaso geometrico', description: 'Vaso decorativo low-poly.',
-      style: 'Geometrico', priceCents: 4990, imageTag: 'decor_vase',
+      id: 'ci_06',
+      categoryId: 'cat_decor',
+      title: 'Vaso geometrico',
+      description: 'Vaso decorativo low-poly.',
+      style: 'Geometrico',
+      priceCents: 4990,
+      imageTag: 'decor_vase',
     ),
     CatalogItem(
-      id: 'ci_07', categoryId: 'cat_decor',
-      title: 'Porta-retrato 3D', description: 'Moldura com relevo tematico.',
-      style: 'Classico', priceCents: 3990, imageTag: 'decor_frame',
+      id: 'ci_07',
+      categoryId: 'cat_decor',
+      title: 'Porta-retrato 3D',
+      description: 'Moldura com relevo tematico.',
+      style: 'Classico',
+      priceCents: 3990,
+      imageTag: 'decor_frame',
     ),
     // Placas e letreiros
     CatalogItem(
-      id: 'ci_08', categoryId: 'cat_sign',
-      title: 'Letreiro de parede', description: 'Nome ou frase em relevo.',
-      style: 'Moderno', priceCents: 6990, imageTag: 'sign_wall',
+      id: 'ci_08',
+      categoryId: 'cat_sign',
+      title: 'Letreiro de parede',
+      description: 'Nome ou frase em relevo.',
+      style: 'Moderno',
+      priceCents: 6990,
+      imageTag: 'sign_wall',
     ),
     CatalogItem(
-      id: 'ci_09', categoryId: 'cat_sign',
-      title: 'Placa de porta', description: 'Placa com nome e icone.',
-      style: 'Minimalista', priceCents: 3990, imageTag: 'sign_door',
+      id: 'ci_09',
+      categoryId: 'cat_sign',
+      title: 'Placa de porta',
+      description: 'Placa com nome e icone.',
+      style: 'Minimalista',
+      priceCents: 3990,
+      imageTag: 'sign_door',
     ),
     // Luminarias
     CatalogItem(
-      id: 'ci_10', categoryId: 'cat_lamp',
-      title: 'Luminaria litofane', description: 'Foto impressa em luz.',
-      style: 'Personalizado', priceCents: 7990, imageTag: 'lamp_litho',
+      id: 'ci_10',
+      categoryId: 'cat_lamp',
+      title: 'Luminaria litofane',
+      description: 'Foto impressa em luz.',
+      style: 'Personalizado',
+      priceCents: 7990,
+      imageTag: 'lamp_litho',
     ),
     CatalogItem(
-      id: 'ci_11', categoryId: 'cat_lamp',
-      title: 'Abajur geometrico', description: 'Abajur com padrao vazado.',
-      style: 'Geometrico', priceCents: 5990, imageTag: 'lamp_geo',
+      id: 'ci_11',
+      categoryId: 'cat_lamp',
+      title: 'Abajur geometrico',
+      description: 'Abajur com padrao vazado.',
+      style: 'Geometrico',
+      priceCents: 5990,
+      imageTag: 'lamp_geo',
     ),
   ];
 
@@ -719,4 +864,163 @@ class InMemoryOperationRepository implements OperationRepository {
         ),
     ];
   }
+
+  // ---------------------------------------------------------------------------
+  // Portal do cliente
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<P3dClient?> portalLogin(String code) async {
+    final normalized = code.trim().toLowerCase();
+    try {
+      return _clients.firstWhere(
+        (c) => c.portalCode.isNotEmpty && c.portalCode == normalized,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<P3dClient>> getPortalClients() async {
+    return _clients.where((c) => c.hasPortalAccess).toList();
+  }
+
+  @override
+  Future<List<PortalProduct>> getPortalProducts(String clientId) async {
+    return _portalProducts
+        .where((e) => e.clientId == clientId)
+        .map((e) => e.product)
+        .toList();
+  }
+
+  @override
+  Future<P3dClient> createPortalClient({
+    required String name,
+    required String phone,
+    required String channel,
+    required String notes,
+    required String portalCode,
+    required String companyName,
+    required int employeeCount,
+  }) async {
+    final client = P3dClient(
+      id: 'cli_${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      phone: phone,
+      channel: channel,
+      notes: notes,
+      currentStatus: 'Novo',
+      lastQuoteLabel: 'Sem orcamento',
+      portalCode: portalCode.trim().toLowerCase(),
+      companyName: companyName,
+      employeeCount: employeeCount,
+    );
+    _clients.insert(0, client);
+    return client;
+  }
+
+  @override
+  Future<PortalProduct> createPortalOrderRequest(
+    String clientId,
+    PortalOrderRequest request,
+  ) async {
+    final now = DateTime.now();
+    final product = PortalProduct(
+      id: 'pp_${now.microsecondsSinceEpoch}',
+      title: request.productTitle,
+      description: request.description,
+      quantity: request.quantity,
+      paidQuantity: 0,
+      unitPriceCents: request.sellPriceCents > 0
+          ? request.sellPriceCents
+          : 1490,
+      costPriceCents: request.costPriceCents,
+      imageUrl: request.imageUrl,
+      status: PortalProductStatus.producing,
+      paymentStatus: PortalProductPaymentStatus.pending,
+      createdAt: now,
+      updatedAt: now,
+    );
+    _portalProducts.insert(
+      0,
+      _PortalProductEntry(clientId: clientId, product: product),
+    );
+    return product;
+  }
+
+  @override
+  Future<void> updatePortalProductStatus(
+    String productId,
+    PortalProductStatus status,
+  ) async {
+    final idx = _portalProducts.indexWhere((e) => e.product.id == productId);
+    if (idx == -1) return;
+    final old = _portalProducts[idx];
+    _portalProducts[idx] = _PortalProductEntry(
+      clientId: old.clientId,
+      product: PortalProduct(
+        id: old.product.id,
+        title: old.product.title,
+        description: old.product.description,
+        quantity: old.product.quantity,
+        paidQuantity: old.product.paidQuantity,
+        unitPriceCents: old.product.unitPriceCents,
+        costPriceCents: old.product.costPriceCents,
+        imageUrl: old.product.imageUrl,
+        status: status,
+        paymentStatus: status == PortalProductStatus.delivered
+            ? PortalProductPaymentStatus.paid
+            : old.product.paymentStatus,
+        createdAt: old.product.createdAt,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> updatePortalProductPayment(
+    String productId,
+    int paidQuantity,
+  ) async {
+    final idx = _portalProducts.indexWhere((e) => e.product.id == productId);
+    if (idx == -1) return;
+    final old = _portalProducts[idx];
+    _portalProducts[idx] = _PortalProductEntry(
+      clientId: old.clientId,
+      product: PortalProduct(
+        id: old.product.id,
+        title: old.product.title,
+        description: old.product.description,
+        quantity: old.product.quantity,
+        paidQuantity: paidQuantity.clamp(0, old.product.quantity),
+        unitPriceCents: old.product.unitPriceCents,
+        costPriceCents: old.product.costPriceCents,
+        imageUrl: old.product.imageUrl,
+        status: old.product.status,
+        paymentStatus: paidQuantity >= old.product.quantity
+            ? PortalProductPaymentStatus.paid
+            : PortalProductPaymentStatus.pending,
+        createdAt: old.product.createdAt,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pedidos (admin)
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<List<CustomerOrder>> getAllCustomerOrders() async {
+    return List.unmodifiable(_customerOrders);
+  }
+}
+
+// Helper to associate portal products with client codes in-memory.
+class _PortalProductEntry {
+  const _PortalProductEntry({required this.clientId, required this.product});
+
+  final String clientId;
+  final PortalProduct product;
 }
